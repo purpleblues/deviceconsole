@@ -14,10 +14,10 @@ How To Use
 
 Usage: ./deviceconsole [options]
 Options:
- -i			Include connect/disconnect messages in standard out
- -l			Show separator line between messages
- -s			Remove date and process name in messages
- -u <udid>		Show only logs from a specific device
+ -i                 Include connect/disconnect messages in standard out
+ -l                 Show separator line between messages
+ -s                 Remove date and process name in messages
+ -u <udid>          Show only logs from a specific device
  -p <process name>	Show only logs from a specific process
 
  This program shows every kind of log by default.
