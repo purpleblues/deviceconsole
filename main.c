@@ -9,6 +9,14 @@ typedef struct {
     CFRunLoopSourceRef source;
 } DeviceConsoleConnection;
 
+
+static bool shouldPrintAll = true;
+static bool shouldPrintWarning;
+static bool shouldPrintNotice;
+static bool shouldPrintError;
+static bool shouldPrintDebug;
+
+static bool shouldRemoveDateAndName;
 static CFMutableDictionaryRef liveConnections;
 static int debug;
 static CFStringRef requiredDeviceId;
@@ -93,36 +101,58 @@ static unsigned char should_print_message(const char *buffer, size_t length)
 
 static void write_colored(int fd, const char *buffer, size_t length)
 {
+    char* kind = NULL;
+    
     if (length < 16) {
         write_fully(fd, buffer, length);
         return;
     }
     size_t space_offsets[3];
     int o = find_space_offsets(buffer, length, space_offsets);
+    // Log level
+    size_t levelLength = space_offsets[2] - space_offsets[1];
+    
+    
+    if(shouldPrintAll == false){
+        kind = (char*)(buffer + space_offsets[1]+2);
+        
+        if(kind[0]=='W' && shouldPrintWarning == false)
+            return;
+        if(kind[0]=='D' && shouldPrintDebug == false)
+            return;
+        if(kind[0]=='E' && shouldPrintError == false)
+            return;
+        if(kind[0]=='N' && shouldPrintNotice == false)
+            return;
+    }
+    
+    
     
     if (o == 3) {
         
-        // Log date and device name
-        write_const(fd, COLOR_DARK_WHITE);
-        write_fully(fd, buffer, space_offsets[0]);
-        // Log process name
-        int pos = 0;
-        for (int i = space_offsets[0]; i < space_offsets[0]; i++) {
-            if (buffer[i] == '[') {
-                pos = i;
-                break;
+        if(shouldRemoveDateAndName == false){
+            // Log date and device name
+            write_const(fd, COLOR_DARK_WHITE);
+            write_fully(fd, buffer, space_offsets[0]);
+            // Log process name
+            int pos = 0;
+            for (int i = space_offsets[0]; i < space_offsets[0]; i++) {
+                if (buffer[i] == '[') {
+                    pos = i;
+                    break;
+                }
+            }
+            write_const(fd, COLOR_CYAN);
+            if (pos && buffer[space_offsets[1]-1] == ']') {
+                write_fully(fd, buffer + space_offsets[0], pos - space_offsets[0]);
+                write_const(fd, COLOR_DARK_CYAN);
+                write_fully(fd, buffer + pos, space_offsets[1] - pos);
+            } else {
+                write_fully(fd, buffer + space_offsets[0], space_offsets[1] - space_offsets[0]);
             }
         }
-        write_const(fd, COLOR_CYAN);
-        if (pos && buffer[space_offsets[1]-1] == ']') {
-            write_fully(fd, buffer + space_offsets[0], pos - space_offsets[0]);
-            write_const(fd, COLOR_DARK_CYAN);
-            write_fully(fd, buffer + pos, space_offsets[1] - pos);
-        } else {
-            write_fully(fd, buffer + space_offsets[0], space_offsets[1] - space_offsets[0]);
-        }
-        // Log level
-        size_t levelLength = space_offsets[2] - space_offsets[1];
+        
+        
         if (levelLength > 4) {
             const char *normalColor;
             const char *darkColor;
@@ -141,14 +171,19 @@ static void write_colored(int fd, const char *buffer, size_t length)
             } else {
                 goto level_unformatted;
             }
+            
             write_string(fd, darkColor);
             write_fully(fd, buffer + space_offsets[1], 2);
+            
             write_string(fd, normalColor);
             write_fully(fd, buffer + space_offsets[1] + 2, levelLength - 4);
+            
             write_string(fd, darkColor);
             write_fully(fd, buffer + space_offsets[1] + levelLength - 2, 1);
+            
             write_const(fd, COLOR_DARK_WHITE);
             write_fully(fd, buffer + space_offsets[1] + levelLength - 1, 1);
+            
         } else {
         level_unformatted:
             write_const(fd, COLOR_RESET);
@@ -277,23 +312,46 @@ static void color_separator(int fd)
 int main (int argc, char * const argv[])
 {
     if ((argc == 2) && (strcmp(argv[1], "--help") == 0)) {
-        fprintf(stderr, "Usage: %s [options]\nOptions:\n -d\t\t\tInclude connect/disconnect messages in standard out\n -u <udid>\t\tShow only logs from a specific device\n -p <process name>\tShow only logs from a specific process\n\nControl-C to disconnect\nMail bug reports and suggestions to <ryan.petrich@medialets.com>\n", argv[0]);
+        fprintf(stderr,
+                "Usage: %s [options]\nOptions:\n -i\t\t\tInclude connect/disconnect messages in standard out\n -l\t\t\tShow separator line between messages\n -s\t\t\tRemove date and process name in messages\n -u <udid>\t\tShow only logs from a specific device\n -p <process name>\tShow only logs from a specific process\n\n This program shows every kind of log by default.\n However, If you use any options below, logs are selected by options.\n\n -w \t\t\tShow Warning logs\n -d \t\t\tShow Debug logs\n -n \t\t\tShow Notice logs\n -e \t\t\tShow Error logs\n\nControl-C to disconnect\nMail bug reports and suggestions to <ryan.petrich@medialets.com>\n\nModified by Sungmin Kim<purpleblues568@gmail.com> at 26 June 2014.\n"
+                , argv[0]);
         return 1;
     }
     int c;
     bool use_separators = false;
     bool force_color = false;
     memset(requiredProcessName, '\0', 256);
-    while ((c = getopt(argc, argv, "dcsu:p:")) != -1)
+    while ((c = getopt(argc, argv, "wnedsiclu:p:")) != -1)
         switch (c)
     {
+        case 'w':
+            shouldPrintAll = false;
+            shouldPrintWarning = true;
+            break;
+        case 'n':
+            shouldPrintAll = false;
+            shouldPrintNotice = true;
+            break;
+        case 'e':
+            shouldPrintAll = false;
+            shouldPrintError = true;
+            break;
         case 'd':
+            shouldPrintAll = false;
+            shouldPrintDebug = true;
+            break;
+            
+            
+        case 's':
+            shouldRemoveDateAndName = true;
+            break;
+        case 'i':
             debug = 1;
             break;
         case 'c':
             force_color = true;
             break;
-        case 's':
+        case 'l':
             use_separators = true;
             break;
         case 'u':
