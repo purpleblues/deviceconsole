@@ -1,7 +1,7 @@
 deviceconsole
 ============
 
-This program makes you see the logs of your iOS device in terminal of your mac.
+This program shows you the logs of the iOS device in terminal of your mac.
 
 I added some features to it and modified a little bit.
 
